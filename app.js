@@ -106,7 +106,7 @@ try { V.bekleyenKomut = JSON.parse(localStorage.getItem("gs_bekleyen_komut") || 
 
 async function yukle() {
   try {
-    const [gecmis, sosyal, kuyruk, onayAyar, ajanGecmis, strateji, istat, kesit, kota, sdurum, kararlar, calisma, config, araclar, canli, yonetici] =
+    const [gecmis, sosyal, kuyruk, onayAyar, ajanGecmis, strateji, istat, kesit, kota, sdurum, kararlar, calisma, config, araclar, canli, yonetici, arge, deneyler] =
       await Promise.all([
         api.json("state/gecmis.json", []), api.json("state/sosyal_gecmisi.json", []), api.json("state/onay_kuyrugu.json", []),
         api.json("state/onay_ayarlari.json", null), api.json("state/ajan_gecmisi.json", []), api.json("state/strateji.json", {}),
@@ -114,8 +114,9 @@ async function yukle() {
         api.json("state/sosyal_durum.json", {}), api.klasor("state/onay_kararlari"),
         api.calismalar().catch(e => ({calismalar: [], nabiz: null, hata: e.message})), api.metin("config.yaml").catch(() => ""),
         api.json("state/arac_durumu.json", null), api.canli().catch(() => []), api.json("state/yonetici.json", []),
+        api.json("state/arge/son.json", null), api.json("state/arge/deneyler.json", []),
       ]);
-    Object.assign(V, {gecmis, sosyal, kuyruk, onayAyar, ajanGecmis, strateji, istat, kesit, kota, sdurum, araclar, canli, yonetici: yonetici || [],
+    Object.assign(V, {gecmis, sosyal, kuyruk, onayAyar, ajanGecmis, strateji, istat, kesit, kota, sdurum, araclar, canli, yonetici: yonetici || [], arge, deneyler: deneyler || [],
       kararlar: new Set((kararlar || []).map(n => n.replace(/\.json$/, ""))), calisma, config: config || "",
       yuklendi: true, hata: null, zaman: new Date()});
     komutlariEsle();
@@ -275,6 +276,18 @@ function ajanlar() {
       balon: bekleyenler().length ? `${bekleyenler().length} karar bekliyor` : "Bekleyen yok", platform: "onay",
       rozet: bekleyenler().length},
   ];
+  const ar = V.arge, aktifDeney = (V.deneyler || []).find(d => d.durum === "aktif");
+  const ilk = (x) => (Array.isArray(x) && x.length ? (typeof x[0] === "string" ? x[0] : `${x[0].hedef}: ${x[0].tahmin || x[0].durum}`) : null);
+  _liste.push(
+    {id: "arge_lider", grup: "arge", ad: "Ar-Ge Lideri", gorev: "Plan + öncelikler", renk: "#6d28d9", sac: "#3f2a1d", aktif: aktif.has("arge"),
+      balon: ar ? `${ar.ozet || "Rapor hazır"}` : "İlk Ar-Ge turu bekleniyor", platform: "strateji", rozet: (ar?.senin_yapacaklarin || []).length},
+    {id: "arastirmaci", grup: "arge", ad: "Trend Araştırmacısı", gorev: "Rakip + fırsat avı", renk: "#0d9488", sac: "#1c1917", aktif: aktif.has("arge"),
+      balon: ilk(ar?.uzmanlar?.arastirmaci?.firsatlar) || "Nişi tarayacak", platform: "strateji"},
+    {id: "gelir", grup: "arge", ad: "Gelir Analisti", gorev: "Para kazanma yolu", renk: "#15803d", sac: "#a16207", aktif: aktif.has("arge"),
+      balon: ilk(ar?.gelir_yol_haritasi) || "Eşikleri hesaplayacak", platform: "strateji"},
+    {id: "deneyci", grup: "arge", ad: "Deney Uzmanı", gorev: "A/B testleri", renk: "#c2410c", sac: "#57534e", aktif: aktif.has("arge"),
+      balon: aktifDeney ? `Deney: ${aktifDeney.ad}` : (V.deneyler || []).length ? "Yeni deney planlıyor" : "İlk deneyi kuracak", platform: "strateji"},
+  );
   return canliUygula(_liste);
 }
 
@@ -284,6 +297,7 @@ const GRUPLAR = [
   ["yonetim", "YÖNETİM KATI", "#f59e0b"],
   ["uretim", "ÜRETİM BANDI", "#3b82f6"],
   ["sosyal", "SOSYAL MEDYA EKİBİ", "#ec4899"],
+  ["arge", "AR-GE LABORATUVARI · büyüme + gelir", "#8b5cf6"],
 ];
 const TEN = ["#f2c9a0", "#e0ac7e", "#c98e62", "#f5d3b3", "#a8714a", "#eac0a0"];
 
@@ -482,6 +496,19 @@ function ekranIcerik(ctx, a, x, y, w, h, t, i) {
     ctx.fillStyle = bg; yuvarlak(ctx, x + w / 2 - 11, y + h / 2 - 8, 22, 16, 4); ctx.fill();
     ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.moveTo(x + w / 2 - 3, y + h / 2 - 4); ctx.lineTo(x + w / 2 + 5, y + h / 2); ctx.lineTo(x + w / 2 - 3, y + h / 2 + 4); ctx.fill();
     ctx.fillStyle = "#f472b6"; for (let k = 0; k < 3; k++) { const yy = y + h - ((t * 12 + k * 9) % h); ctx.fillText ? ctx.fillRect(x + 6 + k * 15, yy, 3, 3) : 0; }
+  } else if (id === "gelir") {
+    ctx.strokeStyle = "#4ade80"; ctx.lineWidth = 1.6; ctx.beginPath();
+    for (let k = 0; k <= 6; k++) { const px = x + 4 + k * (w - 8) / 6, py = y + h - 5 - (k * k / 36) * (h - 12) + Math.sin(t * 3 + k) * 1.5; k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+    ctx.stroke(); ctx.fillStyle = "#facc15"; ctx.font = "700 10px system-ui"; ctx.textAlign = "left"; ctx.fillText("₺", x + 4, y + 11);
+  } else if (id === "deneyci") {
+    const a1 = 6 + Math.abs(Math.sin(t * 2)) * (h - 12), b1 = 6 + Math.abs(Math.sin(t * 2 + 1.3)) * (h - 12);
+    ctx.fillStyle = "#fb923c"; ctx.fillRect(x + 8, y + h - 3 - a1, 10, a1); ctx.fillStyle = "#60a5fa"; ctx.fillRect(x + 24, y + h - 3 - b1, 10, b1);
+    ctx.fillStyle = "#e2e8f0"; ctx.font = "700 8px system-ui"; ctx.textAlign = "left"; ctx.fillText("A", x + 10, y + 9); ctx.fillText("B", x + 26, y + 9);
+  } else if (id === "arastirmaci") {
+    ctx.fillStyle = "#334155"; for (let k = 0; k < 4; k++) ctx.fillRect(x + 4, y + 4 + k * 6, w - 10, 3);
+    const mx = x + 8 + ((t * 10) % (w - 16)), my = y + 12 + Math.sin(t * 2) * 5;
+    ctx.strokeStyle = "#5eead4"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(mx, my, 5, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(mx + 4, my + 4); ctx.lineTo(mx + 8, my + 8); ctx.stroke();
   } else if (id === "yonetici") {
     ctx.fillStyle = "#fbbf24"; for (let k = 0; k < 4; k++) { const bh = 4 + ((k * 7 + Math.floor(t * 2)) % 14); ctx.fillRect(x + 6 + k * 9, y + h - 3 - bh, 6, bh); }
     ctx.fillStyle = "#94a3b8"; ctx.fillRect(x + w - 14, y + 4, 10, 2); ctx.fillRect(x + w - 14, y + 8, 7, 2);
@@ -503,7 +530,8 @@ function karakterCiz(ctx, a, cx, by, t, i, T) {
   // gövde
   ctx.fillStyle = a.renk; yuvarlak(ctx, cx - 18, y + 14, 36, 40, 12); ctx.fill();
   ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.beginPath(); ctx.moveTo(cx - 7, y + 14); ctx.lineTo(cx, y + 23); ctx.lineTo(cx + 7, y + 14); ctx.fill();
-  if (a.id === "yonetici") { ctx.fillStyle = "#b91c1c"; ctx.beginPath(); ctx.moveTo(cx - 2.5, y + 18); ctx.lineTo(cx + 2.5, y + 18); ctx.lineTo(cx + 3.5, y + 34); ctx.lineTo(cx, y + 38); ctx.lineTo(cx - 3.5, y + 34); ctx.fill(); }
+  if (a.id === "deneyci") { ctx.fillStyle = "#f8fafc"; yuvarlak(ctx, cx - 18, y + 14, 36, 40, 12); ctx.fill(); ctx.fillStyle = a.renk; ctx.fillRect(cx - 3, y + 16, 6, 30); }
+  if (a.id === "yonetici" || a.id === "gelir" || a.id === "arge_lider") { ctx.fillStyle = a.id === "gelir" ? "#facc15" : "#b91c1c"; ctx.beginPath(); ctx.moveTo(cx - 2.5, y + 18); ctx.lineTo(cx + 2.5, y + 18); ctx.lineTo(cx + 3.5, y + 34); ctx.lineTo(cx, y + 38); ctx.lineTo(cx - 3.5, y + 34); ctx.fill(); }
   // boyun + baş
   ctx.fillStyle = ten; ctx.fillRect(cx - 4, y + 8, 8, 8);
   ctx.beginPath(); ctx.arc(cx, y, 13, 0, Math.PI * 2); ctx.fill();
@@ -525,7 +553,7 @@ function karakterCiz(ctx, a, cx, by, t, i, T) {
   ctx.arc(cx + bak / 2, y + 5, a.aktif ? 3 : 2.5, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
   // aksesuarlar
   ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 1.3;
-  if (a.id === "editor" || a.id === "strateji") { ctx.beginPath(); ctx.arc(cx - 4, y + 1, 3.4, 0, Math.PI * 2); ctx.moveTo(cx + 7.4, y + 1); ctx.arc(cx + 4, y + 1, 3.4, 0, Math.PI * 2); ctx.moveTo(cx - 0.6, y + 1); ctx.lineTo(cx + 0.6, y + 1); ctx.stroke(); }
+  if (a.id === "editor" || a.id === "strateji" || a.id === "arastirmaci" || a.id === "deneyci") { ctx.beginPath(); ctx.arc(cx - 4, y + 1, 3.4, 0, Math.PI * 2); ctx.moveTo(cx + 7.4, y + 1); ctx.arc(cx + 4, y + 1, 3.4, 0, Math.PI * 2); ctx.moveTo(cx - 0.6, y + 1); ctx.lineTo(cx + 0.6, y + 1); ctx.stroke(); }
   if (a.id === "seslendirici") { ctx.lineWidth = 2.5; ctx.strokeStyle = "#111827"; ctx.beginPath(); ctx.arc(cx, y - 1, 15, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
     ctx.fillStyle = "#111827"; ctx.fillRect(cx - 17, y - 2, 5, 9); ctx.fillRect(cx + 12, y - 2, 5, 9);
     ctx.strokeStyle = "#111827"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(cx - 14, y + 6); ctx.quadraticCurveTo(cx - 12, y + 11, cx - 5, y + 9); ctx.stroke(); }
@@ -680,6 +708,7 @@ function cekmeceCiz() {
     .map(g => ({b: g.baslik, m: g.tiktok.durum === "SEND_TO_USER_INBOX" ? "Taslak — TikTok uygulamasından paylaş" : (g.tiktok.durum || g.tiktok.hata || ""), t: g.tarih}));
   else kayitlar = (V.sosyal || []).filter(g => a.id === "koordinator" || g.platform === a.platform).slice(-10).reverse()
     .map(g => ({b: `${g.islem}${g.uygulandi ? "" : " (öneri)"}`, m: g.ozet || g.hedef, t: g.tarih}));
+  if (a.grup === "arge") { argeCekmece(k, a); return; }
   const olaylar = (V.canli || []).filter(o => (OLAY_AJAN[o.ajan] || o.ajan) === a.id).slice(-6).reverse();
   if (olaylar.length) {
     k.append(el("div", {class: "etiket", text: "Canlı etkinlik", style: "margin-top:6px"}));
@@ -691,6 +720,32 @@ function cekmeceCiz() {
   for (const r of kayitlar) k.append(el("div", {class: "satir"}, ikon(a.platform),
     el("div", {class: "ic"}, el("b", {text: r.b}), el("div", {class: "m alt", text: `${r.m || ""}`}), el("div", {class: "alt", text: sure(r.t)}))));
   if (a.id === "onay" && kayitlar.length) k.append(el("button", {class: "dugme birincil", text: "Onaylara git", onclick: () => sekmeAc("onaylar")}));
+}
+
+function argeCekmece(k, a) {
+  const ar = V.arge, olaylar = (V.canli || []).filter(o => o.ajan === a.id).slice(-6).reverse();
+  if (olaylar.length) {
+    k.append(el("div", {class: "etiket", text: "Canlı etkinlik"}));
+    for (const o of olaylar) k.append(el("div", {class: "alt", style: "overflow-wrap:anywhere"}, `${o.durum === "bitti" ? "✓" : "●"} ${o.mesaj} · ${sure(o.t)}`));
+  }
+  if (!ar) { k.append(el("div", {class: "bos", text: "Ar-Ge ekibi henüz rapor yazmadı. Çarşamba ve cumartesi 12:37'de çalışır; Yönetici'ye “Ar-Ge ekibini çalıştır” diyebilirsin."})); return; }
+  const bolum = (baslik, maddeler) => { if (!maddeler?.length) return;
+    k.append(el("div", {class: "etiket", text: baslik, style: "margin-top:10px"}));
+    for (const m of maddeler) k.append(el("div", {class: "alt", style: "overflow-wrap:anywhere;margin:3px 0"}, "• " + (typeof m === "string" ? m : `${m.hedef} — ${m.durum} → ${m.tahmin}`))); };
+  k.append(el("p", {style: "margin:8px 0", text: ar.ozet || ""}), el("div", {class: "alt", text: `Son rapor: ${sure(ar.tarih)}`}));
+  const u = ar.uzmanlar || {};
+  if (a.id === "arge_lider") { bolum("Öncelikler", ar.oncelikler); bolum("✋ Senin yapacakların", ar.senin_yapacaklarin); bolum("Gelir yol haritası", ar.gelir_yol_haritasi); }
+  if (a.id === "arastirmaci") { k.append(el("p", {class: "alt", text: u.arastirmaci?.ozet || ""})); bolum("Fırsatlar", u.arastirmaci?.firsatlar); bolum("Öneriler", u.arastirmaci?.oneriler);
+    bolum("Üretime verilen yönerge", ar.icerik_yonergesi?.firsat_konulari); }
+  if (a.id === "gelir") { k.append(el("p", {class: "alt", text: u.gelir?.ozet || ""})); bolum("Gelir yol haritası", ar.gelir_yol_haritasi);
+    bolum("Gelir kanalları", u.gelir?.firsatlar);
+    bolum("Platform eşikleri", Object.values(ar.esikler || {}).map(e => `${e.ad}: ${[e.abone_ilerleme && "abone " + e.abone_ilerleme,
+      e.shorts_90g_ilerleme && "Shorts 90 gün " + e.shorts_90g_ilerleme, e.abone_icin_tahmini_gun && "~" + e.abone_icin_tahmini_gun + " gün"].filter(Boolean).join(" · ") || e.kosul}`)); }
+  if (a.id === "deneyci") { k.append(el("p", {class: "alt", text: u.deneyci?.ozet || ""}));
+    for (const d of (V.deneyler || []).slice().reverse().slice(0, 5)) k.append(el("div", {class: "satir"}, ikon("strateji"), el("div", {class: "ic"},
+      el("b", {text: `${d.durum === "aktif" ? "🧪 " : "✓ "}${d.ad}`}), el("div", {class: "alt", text: `A: ${d.A} · B: ${d.B}`}),
+      el("div", {class: "alt", text: d.durum === "aktif" ? `Hedef: varyant başına ${d.hedef_video} olgun video · ${sure(d.baslangic)} başladı` : `Kazanan: ${d.kazanan} — ${d.ozet || ""}`})))); }
+  k.append(el("button", {class: "dugme", style: "margin-top:10px", text: "Tüm Ar-Ge raporları", onclick: () => sekmeAc("raporlar")}));
 }
 
 function canliSerit() {
@@ -796,6 +851,7 @@ function ofisSekmesi(m) {
     ["🎬 1 Shorts üret ve yayınla", "uret", {shorts: "1", videos: "0", yukle: "true"}, "Şimdi bir Shorts üretilip YouTube'a (ve açıksa TikTok/Instagram'a) yüklenecek."],
     ["📣 Sosyal turu çalıştır", "sosyal", {}, "Yorum yanıtları, başlık iyileştirme ve rapor şimdi çalışacak."],
     ["🧭 Strateji ajanı", "ajan", {}, "Strateji ajanı şimdi kanalı inceleyip haftalık planı güncelleyecek."],
+    ["🔬 Ar-Ge ekibi", "arge", {}, "Ar-Ge ekibi şimdi büyüme/gelir araştırması ve A/B deneylerini çalıştıracak (~10 dk)."],
     ["✅ Onayları şimdi uygula", "onaylar", {}, "Verdiğin onaylar hemen uygulanacak."],
   ];
   for (const [ad, gorev, ek, aciklama] of gorevler) satir.append(el("button", {class: "dugme", text: ad, onclick: () =>
@@ -894,8 +950,8 @@ async function raporlarSekmesi(m) {
   m.append(el("h2", {text: "Raporlar"}));
   const iki = el("div", {class: "iki"}), sol = el("div", {class: "kart"}), sag = el("div", {class: "kart rapor", text: "Soldan bir rapor seç."});
   iki.append(sol, sag); m.append(iki);
-  const [sos, aj] = await Promise.all([api.klasor("state/sosyal_raporlari"), api.klasor("state/ajan_raporlari")]);
-  const dosyalar = [...sos.map(n => ({yol: "state/sosyal_raporlari/" + n, ad: "📣 Sosyal · " + n.replace(".md", "")})),
+  const [sos, aj, ag] = await Promise.all([api.klasor("state/sosyal_raporlari"), api.klasor("state/ajan_raporlari"), api.klasor("state/arge/raporlar")]);
+  const dosyalar = [...ag.map(n => ({yol: "state/arge/raporlar/" + n, ad: "🔬 Ar-Ge · " + n.replace(".md", "")})),...sos.map(n => ({yol: "state/sosyal_raporlari/" + n, ad: "📣 Sosyal · " + n.replace(".md", "")})),
     ...aj.map(n => ({yol: "state/ajan_raporlari/" + n, ad: "🧭 Strateji · " + n.replace(".md", "")}))]
     .filter(d => d.yol.endsWith(".md")).sort((a, b) => b.yol.split("/").pop().localeCompare(a.yol.split("/").pop()));
   if (!dosyalar.length) sol.append(el("div", {class: "bos", text: "Henüz rapor yok."}));
