@@ -67,10 +67,11 @@ const api = {
     const aktif = runs.filter(r => r.status !== "completed").slice(0, 4);
     for (const r of aktif) r.isler = ((await this._gh(`/repos/${ayar.repo}/actions/runs/${r.id}/jobs`))?.jobs || [])
       .map(j => ({ad: j.name, durum: j.status, sonuc: j.conclusion}));
-    let nabiz = null;
-    try { nabiz = Number((await this._gh(`/repos/${ayar.repo}/actions/variables/PC_NABIZ`))?.value) || null; } catch (e) { /* yetki yok */ }
+    let nabiz = null, nabizHata = null;
+    try { nabiz = Number((await this._gh(`/repos/${ayar.repo}/actions/variables/PC_NABIZ`))?.value) || null; }
+    catch (e) { nabizHata = /403/.test(e.message) ? "izin" : e.message; }
     return {calismalar: runs.map(r => ({id: r.id, ad: r.display_title, olay: r.event, durum: r.status, sonuc: r.conclusion,
-      tarih: r.created_at, url: r.html_url, isler: r.isler || []})), nabiz};
+      tarih: r.created_at, url: r.html_url, isler: r.isler || []})), nabiz, nabizHata};
   },
   async yaz(yol, veri, mesaj) {
     if (YEREL) return this._yerel("/kapi/yaz", {method: "POST", body: {yol, veri, mesaj}});
@@ -137,6 +138,13 @@ function aktifIsler() {
   }
   return s;
 }
+// Üretim turları (Türkiye saati) — .github/workflows/icerik-dongusu.yml ile aynı
+const TURLAR = [["09:07", "Shorts"], ["11:07", "uzun video"], ["13:07", "Shorts"], ["17:07", "Shorts"], ["20:37", "sosyal ekip"], ["21:07", "Shorts"]];
+function siradakiTur() {
+  const tr = new Date(Date.now() + 3 * 3600e3), dk = tr.getUTCHours() * 60 + tr.getUTCMinutes();
+  for (const [saat, ad] of TURLAR) { const [h, m] = saat.split(":").map(Number); if (h * 60 + m > dk) return `bugün ${saat} (${ad})`; }
+  return `yarın ${TURLAR[0][0]} (${TURLAR[0][1]})`;
+}
 function pcAcik() { const n = V.calisma?.nabiz; return n ? (Date.now() / 1000 - n) < 900 : null; }
 function sure(tarih) {
   const sn = (Date.now() - new Date(tarih).getTime()) / 1000;
@@ -173,8 +181,18 @@ function cipleriCiz() {
   k.replaceChildren();
   if (!V.yuklendi) return;
   const pc = pcAcik();
-  k.append(el("span", {class: "cip " + (pc ? "ok" : pc === false ? "" : ""), text: pc ? "💻 PC açık — üretim bilgisayarda" : pc === false ? "☁️ PC kapalı — üretim bulutta" : "💻 PC durumu bilinmiyor"}));
   const aktif = aktifIsler();
+  const calisan = ajanlar().filter(a => a.aktif);
+  const nabizYas = V.calisma?.nabiz ? sure(V.calisma.nabiz * 1000) : null;
+  // 1) Genel durum: sistem çalışıyor mu, şu an ne yapıyor, sıradaki tur ne zaman
+  k.append(el("span", {class: "cip ok", style: "font-weight:600",
+    text: calisan.length ? `🟢 Sistem aktif — şu an üretimde (${calisan.map(a => a.ad).join(", ")})`
+      : `🟢 Sistem aktif — beklemede, sıradaki tur ${siradakiTur()}`}));
+  // 2) Üretimi kim yapıyor: PC (nabız) mı bulut mu
+  if (V.calisma?.nabizHata === "izin")
+    k.append(el("span", {class: "cip warn", text: "⚠️ PC durumu okunamıyor: GitHub jetonuna 'Variables: Read' izni ekle (Ayarlar)"}));
+  else k.append(el("span", {class: "cip " + (pc ? "ok" : ""), text: pc ? `💻 PC açık — üretimi bilgisayar yapıyor (son sinyal ${nabizYas})`
+    : pc === false ? `☁️ PC kapalı (son sinyal ${nabizYas}) — üretimi bulut yapıyor` : "💻 PC durumu bilinmiyor"}));
   k.append(el("span", {class: "cip " + (aktif.size ? "warn" : ""), text: aktif.size ? `⚙️ Bulutta çalışıyor: ${[...aktif].join(", ")}` : "☁️ Bulut boşta"}));
   const son = (V.istat || []).at(-1);
   if (son?.youtube_abone != null) k.append(el("span", {class: "cip", text: `▶ ${son.youtube_abone} abone`}));
