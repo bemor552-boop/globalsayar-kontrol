@@ -79,6 +79,18 @@ const api = {
     return this._gh(`/repos/${ayar.repo}/contents/${encodeURI(yol)}`, {method: "PUT",
       body: {message: mesaj, content: icerik, ...(mevcut?.sha ? {sha: mevcut.sha} : {})}});
   },
+  async canli() {
+    // Bilgisayardaki olaylar: yerelde dosyadan anında; telefonda nabız görevinin 5 dk'da bir taşıdığı PC_CANLI değişkeninden.
+    // Buluttaki işlerin olayları iş bitince state/canli.json ile gelir.
+    const dosya = await this.json("state/canli.json", []);
+    let pc = [];
+    if (!YEREL) {
+      try { pc = JSON.parse((await this._gh(`/repos/${ayar.repo}/actions/variables/PC_CANLI`))?.value || "[]"); } catch (e) { pc = []; }
+    }
+    const gorulen = new Set(), hepsi = [];
+    for (const o of [...(dosya || []), ...pc]) { const k = o.t + o.ajan + o.mesaj; if (!gorulen.has(k)) { gorulen.add(k); hepsi.push(o); } }
+    return hepsi.sort((a, b) => new Date(a.t) - new Date(b.t)).slice(-150);
+  },
   async gorev(gorev, ek = {}) {
     const inputs = {gorev, ...ek};
     if (YEREL) return this._yerel("/kapi/gorev", {method: "POST", body: inputs});
@@ -92,16 +104,16 @@ const V = {yuklendi: false, hata: null, sekme: "ofis", secili: null, rapor: null
 
 async function yukle() {
   try {
-    const [gecmis, sosyal, kuyruk, onayAyar, ajanGecmis, strateji, istat, kesit, kota, sdurum, kararlar, calisma, config, araclar] =
+    const [gecmis, sosyal, kuyruk, onayAyar, ajanGecmis, strateji, istat, kesit, kota, sdurum, kararlar, calisma, config, araclar, canli] =
       await Promise.all([
         api.json("state/gecmis.json", []), api.json("state/sosyal_gecmisi.json", []), api.json("state/onay_kuyrugu.json", []),
         api.json("state/onay_ayarlari.json", null), api.json("state/ajan_gecmisi.json", []), api.json("state/strateji.json", {}),
         api.json("state/sosyal_istatistik.json", []), api.json("state/kesit_kuyrugu.json", []), api.json("state/youtube_kota.json", {}),
         api.json("state/sosyal_durum.json", {}), api.klasor("state/onay_kararlari"),
         api.calismalar().catch(e => ({calismalar: [], nabiz: null, hata: e.message})), api.metin("config.yaml").catch(() => ""),
-        api.json("state/arac_durumu.json", null),
+        api.json("state/arac_durumu.json", null), api.canli().catch(() => []),
       ]);
-    Object.assign(V, {gecmis, sosyal, kuyruk, onayAyar, ajanGecmis, strateji, istat, kesit, kota, sdurum, araclar,
+    Object.assign(V, {gecmis, sosyal, kuyruk, onayAyar, ajanGecmis, strateji, istat, kesit, kota, sdurum, araclar, canli,
       kararlar: new Set((kararlar || []).map(n => n.replace(/\.json$/, ""))), calisma, config: config || "",
       yuklendi: true, hata: null, zaman: new Date()});
   } catch (e) {
@@ -176,6 +188,26 @@ function cipleriCiz() {
 }
 
 /* ------------------------------------------------------------------ 2D ofis */
+const OLAY_AJAN = {yayin: "youtube"};  // yükleme olayları YouTube masasında görünür
+function sonOlay(id) {
+  const liste = (V.canli || []).filter(o => (OLAY_AJAN[o.ajan] || o.ajan) === id);
+  return liste.at(-1) || null;
+}
+function canliMi(o) {
+  if (!o || o.durum !== "calisiyor") return false;
+  const yas = (Date.now() - new Date(o.t)) / 1000;
+  return yas < (o.ortam === "pc" && !YEREL ? 420 : 180);  // telefonda PC olayları 5 dk gecikmeli gelir
+}
+function canliUygula(liste) {
+  for (const a of liste) {
+    const o = sonOlay(a.id);
+    if (!o) continue;
+    if (canliMi(o)) a.aktif = true;
+    if ((Date.now() - new Date(o.t)) / 1000 < 1800) a.balon = `${o.durum === "hata" ? "⚠️ " : ""}${o.mesaj}`;
+    a.sonOlay = o;
+  }
+  return liste;
+}
 function ajanlar() {
   const aktif = aktifIsler();
   const uretimAktif = aktif.has("uret") || aktif.has("kapi");
@@ -187,7 +219,7 @@ function ajanlar() {
   const igSon = son("instagram");
   const ytSon = son("youtube");
   const raporlar = (V.sosyal || []).length;
-  return [
+  const _liste = [
     {id: "senarist", ad: "Senarist", gorev: "Fikir + senaryo", renk: "#2563eb", sac: "#3b2a1a", aktif: uretimAktif,
       balon: sonVideo ? `Son: ${sonVideo.baslik}` : "Fikir bekliyor", platform: "uretim"},
     {id: "seslendirici", ad: "Seslendirici", gorev: "Gemini TTS + altyazı", renk: "#0891b2", sac: "#111", aktif: uretimAktif,
@@ -218,6 +250,7 @@ function ajanlar() {
       balon: bekleyenler().length ? `${bekleyenler().length} karar bekliyor` : "Bekleyen yok", platform: "onay",
       rozet: bekleyenler().length},
   ];
+  return canliUygula(_liste);
 }
 
 const OFIS = {canvas: null, ctx: null, w: 0, h: 0, kutular: [], t: 0, rafId: 0};
@@ -348,13 +381,38 @@ function cekmeceCiz() {
     .map(g => ({b: g.baslik, m: g.tiktok.durum === "SEND_TO_USER_INBOX" ? "Taslak — TikTok uygulamasından paylaş" : (g.tiktok.durum || g.tiktok.hata || ""), t: g.tarih}));
   else kayitlar = (V.sosyal || []).filter(g => a.id === "koordinator" || g.platform === a.platform).slice(-10).reverse()
     .map(g => ({b: `${g.islem}${g.uygulandi ? "" : " (öneri)"}`, m: g.ozet || g.hedef, t: g.tarih}));
+  const olaylar = (V.canli || []).filter(o => (OLAY_AJAN[o.ajan] || o.ajan) === a.id).slice(-6).reverse();
+  if (olaylar.length) {
+    k.append(el("div", {class: "etiket", text: "Canlı etkinlik", style: "margin-top:6px"}));
+    for (const o of olaylar) k.append(el("div", {class: "alt", style: "overflow-wrap:anywhere"},
+      `${o.durum === "hata" ? "⚠️" : o.durum === "bitti" ? "✓" : "●"} ${o.mesaj} · ${sure(o.t)}`));
+    k.append(el("div", {class: "etiket", text: "Sonuçlar", style: "margin-top:10px"}));
+  }
   if (!kayitlar.length) k.append(el("div", {class: "bos", text: "Henüz kayıt yok."}));
   for (const r of kayitlar) k.append(el("div", {class: "satir"}, ikon(a.platform),
     el("div", {class: "ic"}, el("b", {text: r.b}), el("div", {class: "m alt", text: `${r.m || ""}`}), el("div", {class: "alt", text: sure(r.t)}))));
   if (a.id === "onay" && kayitlar.length) k.append(el("button", {class: "dugme birincil", text: "Onaylara git", onclick: () => sekmeAc("onaylar")}));
 }
 
+function canliSerit() {
+  const k = el("div", {class: "kart", id: "canli-serit", style: "margin-bottom:12px;display:flex;flex-direction:column;gap:6px"});
+  const liste = ajanlar();
+  const calisan = liste.filter(a => a.aktif);
+  const son = (V.canli || []).slice(-6).reverse();
+  const nokta = (renk) => el("span", {style: `display:inline-block;width:10px;height:10px;border-radius:50%;background:${renk};margin-right:6px`});
+  k.append(el("b", {}, nokta(calisan.length ? "#22c55e" : "#94a3b8"),
+    calisan.length ? `Şu an çalışan: ${calisan.map(a => a.ad).join(", ")}` : "Şu an çalışan ajan yok — bir sonraki tur planlandığı saatte başlar"));
+  for (const o of son) {
+    const a = liste.find(x => x.id === (OLAY_AJAN[o.ajan] || o.ajan));
+    k.append(el("div", {class: "alt", style: "overflow-wrap:anywhere"},
+      `${o.durum === "hata" ? "⚠️" : o.durum === "bitti" ? "✓" : "●"} ${a ? a.ad : o.ajan}: ${o.mesaj} · ${sure(o.t)}${o.ortam === "bulut" ? " · bulut" : ""}`));
+  }
+  if (!son.length) k.append(el("div", {class: "alt", text: "Henüz canlı etkinlik yok. İlk üretim turunda ajanların her adımı burada akacak."}));
+  return k;
+}
+
 function ofisSekmesi(m) {
+  m.append(canliSerit());
   const kap = el("div", {id: "ofis-kap"});
   m.append(kap, el("div", {class: "kart cekmece", id: "cekmece"}));
   ofisKur(kap);
@@ -581,7 +639,9 @@ async function ciz() {
   if (!api.hazir()) { cancelAnimationFrame(OFIS.rafId); m.replaceChildren(); kurulumEkrani(m); return; }
   if (V.hata && !V.yuklendi) { m.replaceChildren(el("div", {class: "hata", text: "Veri okunamadı: " + V.hata})); return; }
   if (!V.yuklendi) return;
-  if (V.sekme === "ofis" && document.getElementById("ofis")) { cekmeceCiz(); ofisCiz(); return; } // canvas zaten canlı
+  if (V.sekme === "ofis" && document.getElementById("ofis")) {  // canvas zaten canlı: sadece şerit ve çekmece
+    document.getElementById("canli-serit")?.replaceWith(canliSerit()); cekmeceCiz(); ofisCiz(); return;
+  }
   cancelAnimationFrame(OFIS.rafId); OFIS.ctx = null;
   m.replaceChildren();
   if (V.hata) m.append(el("div", {class: "hata", text: "Son yenileme başarısız: " + V.hata}));
@@ -596,5 +656,12 @@ addEventListener("resize", () => { if (OFIS.ctx) { boyutla(); ofisCiz(); } });
 try { V.sekme = localStorage.getItem("gs_sekme") || "ofis"; } catch (e) {}
 if ("serviceWorker" in navigator && !YEREL) navigator.serviceWorker.register("sw.js").catch(() => {});
 ciz();
-if (api.hazir()) { yukle(); setInterval(() => { if (!document.hidden) yukle(); }, 60000); }
+if (api.hazir()) {
+  yukle();
+  setInterval(() => { if (!document.hidden) yukle(); }, 60000);
+  if (YEREL) setInterval(async () => {  // yerelde canlı akış 10 sn'de bir
+    if (document.hidden || V.sekme !== "ofis") return;
+    try { V.canli = await api.canli(); ciz(); } catch (e) {}
+  }, 10000);
+}
 document.addEventListener("visibilitychange", () => { if (!document.hidden && api.hazir()) yukle(); });
