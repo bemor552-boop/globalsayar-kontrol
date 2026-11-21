@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#11151c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Global Sayar">
+<title>Global Sayar Kontrol</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="ikon-192.png">
+<link rel="apple-touch-icon" href="ikon-192.png">
+<style>
+/* Düzen: üstte durum şeridi, ortada sekme içeriği (Ofis = 2D canvas), telefonda altta sekme çubuğu */
+:root{
+  --bg:#eef1f5; --panel:#ffffff; --fg:#141922; --muted:#5d6676; --line:#d9dee6;
+  --accent:#2563eb; --accent-soft:#e3ecfd; --ok:#15803d; --ok-soft:#dcf3e4; --warn:#b45309; --warn-soft:#fdf0d9;
+  --bad:#b91c1c; --bad-soft:#fbe3e3; --floor:#dfe4ec; --floor2:#d5dbe5; --wall:#c9d1dd;
+  --f:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1117; --panel:#161b24; --fg:#e6e9ef; --muted:#97a0b0; --line:#28303d;
+  --accent:#6ea0ff; --accent-soft:#1b2a47; --ok:#4ade80; --ok-soft:#12301e; --warn:#fbbf24; --warn-soft:#3a2a0c;
+  --bad:#f87171; --bad-soft:#3b1616; --floor:#1a202b; --floor2:#1e2531; --wall:#252d3a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1117; --panel:#161b24; --fg:#e6e9ef; --muted:#97a0b0; --line:#28303d;
+  --accent:#6ea0ff; --accent-soft:#1b2a47; --ok:#4ade80; --ok-soft:#12301e; --warn:#fbbf24; --warn-soft:#3a2a0c;
+  --bad:#f87171; --bad-soft:#3b1616; --floor:#1a202b; --floor2:#1e2531; --wall:#252d3a; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--f);-webkit-tap-highlight-color:transparent}
+button{font:inherit;cursor:pointer}
+a{color:var(--accent)}
+.ust{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);
+  padding:calc(env(safe-area-inset-top,0px) + 10px) max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px))}
+.ust-ic{max-width:1180px;margin:0 auto;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.logo{font-weight:700;font-size:1.05rem;display:flex;gap:8px;align-items:center}
+.logo img{width:26px;height:26px;border-radius:7px}
+.cipler{display:flex;flex-wrap:wrap;gap:6px;flex:1}
+.cip{font-size:.78rem;padding:3px 9px;border-radius:99px;background:var(--bg);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.cip.ok{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.cip.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.cip.bad{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.sekmeler{display:flex;gap:4px}
+.sekme{border:0;background:transparent;color:var(--muted);padding:7px 12px;border-radius:8px;position:relative}
+.sekme[aria-selected="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.sekme .rozet{position:absolute;top:0;right:2px;background:var(--bad);color:#fff;font-size:.68rem;border-radius:99px;padding:0 5px;line-height:16px}
+main{max-width:1180px;margin:0 auto;padding:16px max(16px,env(safe-area-inset-right,0px)) 96px max(16px,env(safe-area-inset-left,0px))}
+.kart{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.izgara{display:grid;gap:12px}
+h2{font-size:1.1rem;margin:4px 0 12px}
+.alt{color:var(--muted);font-size:.85rem}
+#ofis-kap{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+#ofis{display:block;width:100%;touch-action:manipulation}
+.cekmece{margin-top:12px}
+.satir{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)}
+.satir:last-child{border-bottom:0}
+.ikon{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-size:.85rem;flex:none;color:#fff;font-weight:700}
+.satir .ic{min-width:0;flex:1}
+.satir .ic b{display:block;font-weight:600}
+.satir .ic .m{overflow-wrap:anywhere}
+.dugme{border:1px solid var(--line);background:var(--panel);color:var(--fg);padding:7px 14px;border-radius:8px}
+.dugme.birincil{background:var(--accent);border-color:var(--accent);color:#fff}
+.dugme.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+.dugme.kirmizi{color:var(--bad)}
+.dugme:disabled{opacity:.5;cursor:default}
+.dugme:focus-visible,.sekme:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.onay{display:flex;flex-direction:column;gap:8px}
+.onay .eylem{display:flex;gap:8px;flex-wrap:wrap}
+.onay input{flex:1;min-width:140px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
+.etiket{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.rapor{overflow-wrap:anywhere}
+.rapor h1{font-size:1.15rem}.rapor h2{font-size:1rem;margin-top:16px}
+.rapor pre{background:var(--bg);padding:10px;border-radius:8px;overflow-x:auto;font:12px/1.45 var(--mono);white-space:pre-wrap}
+.liste-btn{display:block;width:100%;text-align:left;border:0;background:transparent;color:var(--fg);padding:9px 4px;border-bottom:1px solid var(--line)}
+.liste-btn[aria-current="true"]{color:var(--accent);font-weight:600}
+.iki{display:grid;grid-template-columns:260px 1fr;gap:12px}
+.iki>*{min-width:0}
+@media (max-width:760px){.iki{grid-template-columns:1fr}}
+.video{display:grid;grid-template-columns:1fr auto;gap:4px 12px}
+.sayi{font-variant-numeric:tabular-nums;font-weight:600}
+.form{display:grid;gap:10px;max-width:560px}
+.form input[type=password],.form input[type=text],.form select{padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit;width:100%}
+.anahtar{display:flex;gap:10px;align-items:flex-start}
+.anahtar input{margin-top:4px}
+.bos{color:var(--muted);padding:18px 4px;text-align:center}
+.hata{background:var(--bad-soft);color:var(--bad);padding:10px 12px;border-radius:8px}
+.bilgi{background:var(--accent-soft);color:var(--fg);padding:10px 12px;border-radius:8px;font-size:.9rem}
+.onaykutu{position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;z-index:20;padding:16px}
+.onaykutu .kart{max-width:420px;width:100%}
+@media (max-width:760px){
+  .sekmeler{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--panel);border-top:1px solid var(--line);
+    justify-content:space-around;padding:6px max(8px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}
+  .sekme{padding:6px 6px;font-size:.78rem;display:flex;flex-direction:column;align-items:center}
+  .ust-ic{gap:6px 10px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header class="ust">
+  <div class="ust-ic">
+    <div class="logo"><img src="ikon-192.png" alt="">Global Sayar Kontrol</div>
+    <div class="cipler" id="cipler"></div>
+    <nav class="sekmeler" role="tablist" id="sekmeler">
+      <button class="sekme" role="tab" data-sekme="ofis" aria-selected="true">🏢<span>Ofis</span></button>
+      <button class="sekme" role="tab" data-sekme="onaylar">✅<span>Onaylar</span></button>
+      <button class="sekme" role="tab" data-sekme="akis">📜<span>Akış</span></button>
+      <button class="sekme" role="tab" data-sekme="raporlar">📊<span>Raporlar</span></button>
+      <button class="sekme" role="tab" data-sekme="videolar">🎬<span>Videolar</span></button>
+      <button class="sekme" role="tab" data-sekme="ayarlar">⚙️<span>Ayarlar</span></button>
+    </nav>
+  </div>
+</header>
+<main id="icerik"><div class="bos">Yükleniyor…</div></main>
+<script src="app.js"></script>
+</body>
+</html>
