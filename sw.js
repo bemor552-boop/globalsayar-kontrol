@@ -1,5 +1,5 @@
 ﻿// Uygulama kabuğunu önbellekler (telefonda hızlı açılış, çevrimdışında son görünüm). Veriler hep ağdan gelir.
-const SURUM = "gs-kontrol-ed395c1";
+const SURUM = "gs-kontrol-dbcae4a";
 const KABUK = ["./", "index.html", "app.js", "ofis3d.js", "manifest.webmanifest", "ikon-192.png", "ikon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(SURUM).then(c => c.addAll(KABUK))); self.skipWaiting(); });
 self.addEventListener("activate", e => {

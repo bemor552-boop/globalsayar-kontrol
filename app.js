@@ -121,6 +121,7 @@ async function yukle() {
       kararlar: new Set((kararlar || []).map(n => n.replace(/\.json$/, ""))), calisma, config: config || "",
       yuklendi: true, hata: null, zaman: new Date()});
     komutlariEsle();
+    try { V.pano = (await api.json("state/pano.json", [])) || []; } catch (e) { V.pano = []; }
   } catch (e) {
     V.hata = e.message;
   }
@@ -952,7 +953,16 @@ function akisSekmesi(m) {
       m: g.deney || `${g.eski} → ${g.yeni}`, t: g.tarih})),
     ...(V.gecmis || []).filter(g => g.video_id).map(g => ({p: "uretim", b: `Yayınlandı (${g.tur})`, m: g.baslik, t: g.tarih})),
   ].sort((a, b) => new Date(b.t) - new Date(a.t)).slice(0, 80);
-  m.append(el("h2", {text: "Ajanların yaptıkları"}));
+  const adOf = id => { const x = ajanlar().find(q => q.id === id); return x ? x.ad : (id === "herkes" ? "Herkes" : id); };
+  const pano = (V.pano || []).slice(-40).reverse();
+  m.append(el("h2", {text: "💬 Ajan konuşmaları"}));
+  const pk = el("div", {class: "kart"});
+  if (!pano.length) pk.append(el("div", {class: "bos", text: "Henüz ajanlar arası not yok. Müdür, Ar-Ge ve Yönetici ajanları çalıştıkça birbirlerine bıraktıkları notlar burada görünür."}));
+  for (const n of pano) pk.append(el("div", {class: "satir"}, el("div", {class: "ic"},
+    el("b", {text: `${adOf(n.kimden)} → ${adOf(n.kime)}${n.onem >= 3 ? " ❗" : ""}`}),
+    el("div", {class: "m", style: "overflow-wrap:anywhere", text: `${n.konu}: ${n.icerik}`}), el("div", {class: "alt", text: sure(n.t)}))));
+  m.append(pk);
+  m.append(el("h2", {text: "Ajanların yaptıkları", style: "margin-top:20px"}));
   const kart = el("div", {class: "kart"});
   if (!olaylar.length) kart.append(el("div", {class: "bos", text: "Henüz kayıt yok."}));
   for (const o of olaylar) kart.append(el("div", {class: "satir"}, ikon(o.p),
