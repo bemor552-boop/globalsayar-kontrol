@@ -106,7 +106,7 @@ try { V.bekleyenKomut = JSON.parse(localStorage.getItem("gs_bekleyen_komut") || 
 
 async function yukle() {
   try {
-    const [gecmis, sosyal, kuyruk, onayAyar, ajanGecmis, strateji, istat, kesit, kota, sdurum, kararlar, calisma, config, araclar, canli, yonetici, arge, deneyler] =
+    const [gecmis, sosyal, kuyruk, onayAyar, ajanGecmis, strateji, istat, kesit, kota, sdurum, kararlar, calisma, config, araclar, canli, yonetici, arge, deneyler, mudurK, kadroK, kadroR] =
       await Promise.all([
         api.json("state/gecmis.json", []), api.json("state/sosyal_gecmisi.json", []), api.json("state/onay_kuyrugu.json", []),
         api.json("state/onay_ayarlari.json", null), api.json("state/ajan_gecmisi.json", []), api.json("state/strateji.json", {}),
@@ -115,8 +115,9 @@ async function yukle() {
         api.calismalar().catch(e => ({calismalar: [], nabiz: null, hata: e.message})), api.metin("config.yaml").catch(() => ""),
         api.json("state/arac_durumu.json", null), api.canli().catch(() => []), api.json("state/yonetici.json", []),
         api.json("state/arge/son.json", null), api.json("state/arge/deneyler.json", []),
+        api.json("state/mudur.json", []), api.json("state/ajanlar.json", []), api.json("state/ajanlar_rapor.json", {}),
       ]);
-    Object.assign(V, {gecmis, sosyal, kuyruk, onayAyar, ajanGecmis, strateji, istat, kesit, kota, sdurum, araclar, canli, yonetici: yonetici || [], arge, deneyler: deneyler || [],
+    Object.assign(V, {gecmis, sosyal, kuyruk, onayAyar, ajanGecmis, strateji, istat, kesit, kota, sdurum, araclar, canli, yonetici: yonetici || [], arge, deneyler: deneyler || [], mudur: mudurK || [], kadro: kadroK || [], kadroRapor: kadroR || {},
       kararlar: new Set((kararlar || []).map(n => n.replace(/\.json$/, ""))), calisma, config: config || "",
       yuklendi: true, hata: null, zaman: new Date()});
     komutlariEsle();
@@ -288,6 +289,11 @@ function ajanlar() {
     {id: "deneyci", grup: "arge", ad: "Deney Uzmanı", gorev: "A/B testleri", renk: "#c2410c", sac: "#57534e", aktif: aktif.has("arge"),
       balon: aktifDeney ? `Deney: ${aktifDeney.ad}` : (V.deneyler || []).length ? "Yeni deney planlıyor" : "İlk deneyi kuracak", platform: "strateji"},
   );
+  const md = (V.mudur || []).at(-1), den = (V.denetimler || []).at(-1);
+  _liste.unshift({id: "mudur", grup: "yonetim", ad: "Müdür", gorev: "Son denetim + sistem gelişimi", renk: "#0f172a", sac: "#6b7280", aktif: false,
+    balon: md?.eklenen ? `Yeni ajan: ${md.eklenen}` : md?.degerlendirme ? md.degerlendirme.slice(0, 90) : "Videoları denetler, kadroyu geliştirir", platform: "onay"});
+  for (const d of V.kadro || []) _liste.push({id: d.id, grup: d.grup || "yonetim", ad: d.ad, gorev: d.gorev, renk: d.renk || "#0ea5e9", sac: "#44403c",
+    aktif: false, dinamik: true, balon: V.kadroRapor?.[d.id]?.ozet || "İlk görevini bekliyor", platform: "strateji"});
   return canliUygula(_liste);
 }
 
@@ -531,7 +537,7 @@ function karakterCiz(ctx, a, cx, by, t, i, T) {
   ctx.fillStyle = a.renk; yuvarlak(ctx, cx - 18, y + 14, 36, 40, 12); ctx.fill();
   ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.beginPath(); ctx.moveTo(cx - 7, y + 14); ctx.lineTo(cx, y + 23); ctx.lineTo(cx + 7, y + 14); ctx.fill();
   if (a.id === "deneyci") { ctx.fillStyle = "#f8fafc"; yuvarlak(ctx, cx - 18, y + 14, 36, 40, 12); ctx.fill(); ctx.fillStyle = a.renk; ctx.fillRect(cx - 3, y + 16, 6, 30); }
-  if (a.id === "yonetici" || a.id === "gelir" || a.id === "arge_lider") { ctx.fillStyle = a.id === "gelir" ? "#facc15" : "#b91c1c"; ctx.beginPath(); ctx.moveTo(cx - 2.5, y + 18); ctx.lineTo(cx + 2.5, y + 18); ctx.lineTo(cx + 3.5, y + 34); ctx.lineTo(cx, y + 38); ctx.lineTo(cx - 3.5, y + 34); ctx.fill(); }
+  if (a.id === "yonetici" || a.id === "mudur" || a.id === "gelir" || a.id === "arge_lider") { ctx.fillStyle = a.id === "gelir" ? "#facc15" : "#b91c1c"; ctx.beginPath(); ctx.moveTo(cx - 2.5, y + 18); ctx.lineTo(cx + 2.5, y + 18); ctx.lineTo(cx + 3.5, y + 34); ctx.lineTo(cx, y + 38); ctx.lineTo(cx - 3.5, y + 34); ctx.fill(); }
   // boyun + baş
   ctx.fillStyle = ten; ctx.fillRect(cx - 4, y + 8, 8, 8);
   ctx.beginPath(); ctx.arc(cx, y, 13, 0, Math.PI * 2); ctx.fill();
@@ -697,6 +703,7 @@ function cekmeceCiz() {
   if (!a) { k.append(el("div", {class: "alt", text: "Bir ajana dokun: ne yaptığını ve raporlarını gör."})); return; }
   k.append(el("h2", {}, ikon(a.platform), " ", a.ad), el("p", {class: "alt", text: `${a.gorev} · ${a.aktif ? "şu an çalışıyor" : "beklemede"}`}));
   let kayitlar = [];
+  if (a.id === "mudur" || a.dinamik) { mudurCekmece(k, a); return; }
   if (a.id === "editor" || a.id === "yonetmen") kayitlar = (V.gecmis || []).filter(g => g.video_id).slice(-8).reverse()
     .map(g => ({b: g.baslik, m: `görüntü uyumu ${g.goruntu_uyum ?? "–"}/10${g.kalite_sorunlari ? " · ⚠️ " + g.kalite_sorunlari.join(", ") : " · kalite temiz"}`, t: g.tarih}));
   else if (a.platform === "uretim") kayitlar = (V.gecmis || []).filter(g => g.video_id).slice(-8).reverse()
@@ -720,6 +727,31 @@ function cekmeceCiz() {
   for (const r of kayitlar) k.append(el("div", {class: "satir"}, ikon(a.platform),
     el("div", {class: "ic"}, el("b", {text: r.b}), el("div", {class: "m alt", text: `${r.m || ""}`}), el("div", {class: "alt", text: sure(r.t)}))));
   if (a.id === "onay" && kayitlar.length) k.append(el("button", {class: "dugme birincil", text: "Onaylara git", onclick: () => sekmeAc("onaylar")}));
+}
+
+function mudurCekmece(k, a) {
+  const olaylar = (V.canli || []).filter(o => o.ajan === a.id).slice(-6).reverse();
+  if (olaylar.length) {
+    k.append(el("div", {class: "etiket", text: "Canlı etkinlik"}));
+    for (const o of olaylar) k.append(el("div", {class: "alt", style: "overflow-wrap:anywhere"}, `${o.durum === "hata" ? "⚠️" : o.durum === "bitti" ? "✓" : "●"} ${o.mesaj} · ${sure(o.t)}`));
+  }
+  const bolum = (baslik, maddeler) => { if (!maddeler?.length) return;
+    k.append(el("div", {class: "etiket", text: baslik, style: "margin-top:10px"}));
+    for (const m of maddeler) k.append(el("div", {class: "alt", style: "overflow-wrap:anywhere;margin:3px 0"}, "• " + m)); };
+  if (a.dinamik) {
+    const d = (V.kadro || []).find(x => x.id === a.id), r = V.kadroRapor?.[a.id];
+    k.append(el("p", {style: "margin:8px 0", text: r?.ozet || "Henüz rapor yok; Müdür'ün bir sonraki turunda çalışacak."}));
+    bolum("Öneriler", r?.oneriler); if (d?.neden) bolum("Müdür neden ekledi", [d.neden]);
+    return;
+  }
+  const md = V.mudur || [];
+  if (!md.length) { k.append(el("div", {class: "bos", text: "Müdür henüz değerlendirme yapmadı. Çarşamba ve cumartesi çalışır; Yönetici'ye “Müdür turunu çalıştır” diyebilirsin. Her video yayından önce Müdür'ün son denetiminden geçer."})); return; }
+  const s = md.at(-1);
+  k.append(el("p", {style: "margin:8px 0", text: s.degerlendirme || ""}), el("div", {class: "alt", text: `Son değerlendirme: ${sure(s.t)}`}));
+  bolum("Öncelikler", s.oncelikler);
+  if (s.eklenen) bolum("Bu turda kadroya eklenen", [s.eklenen]);
+  if (s.emekli?.length) bolum("Emekli edilen", s.emekli);
+  bolum("Kadro (Müdür'ün açtığı ajanlar)", (V.kadro || []).map(d => `${d.ad} — ${d.gorev}`));
 }
 
 function argeCekmece(k, a) {
@@ -836,12 +868,22 @@ function yoneticiKart() {
   return kart;
 }
 
+function ofis3dAcik() {
+  if (typeof Ofis3D === "undefined" || !Ofis3D.var()) return false;
+  try { return localStorage.getItem("gs_ofis3d") !== "0"; } catch (e) { return true; }
+}
 function ofisSekmesi(m) {
   m.append(yoneticiKart());
   m.append(canliSerit());
   const kap = el("div", {id: "ofis-kap"});
-  m.append(kap, el("div", {class: "kart cekmece", id: "cekmece"}));
-  ofisKur(kap);
+  const uc = ofis3dAcik();
+  const gecis = el("button", {class: "dugme", type: "button", style: "margin-bottom:8px;padding:6px 12px;font-size:13px",
+    text: uc ? "🖼️ 2B görünüme geç" : "🧊 3B ofise geç", onclick: () => {
+      try { localStorage.setItem("gs_ofis3d", uc ? "0" : "1"); } catch (e) {}
+      ciz();
+    }});
+  m.append(typeof Ofis3D !== "undefined" && Ofis3D.var() ? gecis : "", kap, el("div", {class: "kart cekmece", id: "cekmece"}));
+  if (uc) { kap.classList.add("o3"); Ofis3D.kur(kap); } else ofisKur(kap);
   cekmeceCiz();
   // Hızlı görevler
   const g = el("div", {class: "kart cekmece"}, el("h2", {text: "Görev ver"}),
@@ -1063,16 +1105,21 @@ async function ciz() {
   cipleriCiz();
   document.querySelectorAll(".sekme").forEach(b => b.setAttribute("aria-selected", String(b.dataset.sekme === V.sekme)));
   const m = document.getElementById("icerik");
-  if (!api.hazir()) { cancelAnimationFrame(OFIS.rafId); m.replaceChildren(); kurulumEkrani(m); return; }
+  if (!api.hazir()) { cancelAnimationFrame(OFIS.rafId); if (typeof Ofis3D !== "undefined") Ofis3D.durdur(); m.replaceChildren(); kurulumEkrani(m); return; }
   if (V.hata && !V.yuklendi) { m.replaceChildren(el("div", {class: "hata", text: "Veri okunamadı: " + V.hata})); return; }
   if (!V.yuklendi) return;
-  if (V.sekme === "ofis" && document.getElementById("ofis")) {  // canvas zaten canlı: sadece şerit ve çekmece
+  if (V.sekme === "ofis" && document.getElementById("ofis") && !ofis3dAcik()) {  // canvas zaten canlı: sadece şerit ve çekmece
     document.getElementById("canli-serit")?.replaceWith(canliSerit());
     document.getElementById("yonetici-gecmis")?.replaceWith(yoneticiGecmis());
     const yeniH = OFIS.h; boyutla(); if (OFIS.h !== yeniH) ofisCiz();
     cekmeceCiz(); ofisCiz(); return;
   }
-  cancelAnimationFrame(OFIS.rafId); OFIS.ctx = null;
+  if (V.sekme === "ofis" && document.getElementById("ofis3d") && ofis3dAcik()) {  // 3B sahne canlı: sadece şerit ve çekmece
+    document.getElementById("canli-serit")?.replaceWith(canliSerit());
+    document.getElementById("yonetici-gecmis")?.replaceWith(yoneticiGecmis());
+    Ofis3D.guncelle(); cekmeceCiz(); return;
+  }
+  cancelAnimationFrame(OFIS.rafId); OFIS.ctx = null; if (typeof Ofis3D !== "undefined") Ofis3D.durdur();
   m.replaceChildren();
   if (V.hata) m.append(el("div", {class: "hata", text: "Son yenileme başarısız: " + V.hata}));
   ({ofis: ofisSekmesi, onaylar: onaylarSekmesi, akis: akisSekmesi, raporlar: raporlarSekmesi,
